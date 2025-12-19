@@ -1,10 +1,10 @@
-# Make images of wombat detector efficiency correction, derived from vanadium calibration run
-
-# in the detector image array, element (0,0) i.e. 1st row, 1st col,
-# is the "bottom left" of the detector, i.e. smallest 2theta and vertical min of detector
-# element (127, 967) is the "top right" of the detector, i.e. largest 2theta and vertical max of detector
-
-# how the efficiency correction is applied
+# Int3D expects Wombat data HDF5 files to have 3 angles: euler_omega, euler_chi
+# and euler_phi
+# However many sample environments there is no 'chi' or 'phi', just omega rotation
+# through som or msom
+# this script writes a new HDF5 file in the Int3D format:
+# it copies som/msom to euler_omega
+# and fills euler_chi and euler_phi with a 0 for every omega step.
 
 import h5py
 import numpy as np
