@@ -44,4 +44,10 @@ files_list = ['WBT0107754.nx.hdf', 'WBT0107772.nx.hdf']
 ##################### SUMMING EQUIVALENT DETECTOR FRAMES IN FILES
 input_files = ['data/WBT0107754.nx.hdf', 'data/WBT0107772.nx.hdf']
 output_file = 'summed.nx.hdf'
-SingleCrystalHDF.sum_equivalent_frames_in_HDFs(input_files, output_file)
+#SingleCrystalHDF.sum_equivalent_frames_in_HDFs(input_files, output_file)
+data_dir = ''
+SingleCrystalHDF.HDF_to_Int3D_format(data_dir, ['summed.nx.hdf'], formatted_data_dir,
+                                     eom_angle = 'som', echi_angle = 0, 
+                                     ephi_angle = 'msom', 
+                                     normalisation_value = 0,
+                                     efficiency_calibration='eff_2026_04_13.gumtree.hdf') 

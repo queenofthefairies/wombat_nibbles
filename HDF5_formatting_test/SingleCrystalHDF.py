@@ -13,7 +13,7 @@ def write_or_create_dataset(new_file, group_name, data_arr):
         new_file.create_dataset(group_name, data=data_arr)
 
     if group_name == 'entry1/data/normalisation':
-        print('rewriting normalisation')
+        print('     rewriting normalisation')
         data_arr = data_arr.astype(np.bytes_)
         del new_file[group_name]
         new_file.create_dataset(group_name, data=data_arr)
@@ -49,18 +49,41 @@ def copy_run_info(old_file, new_file):
 
 ################################################################################
 def normalise_frames_to_monitor_counts(old_file, new_file, 
-                                       normalisation_value =10000):
+                                       normalisation_value = 0):
     # get data
     beam_monitor_counts = old_file['entry1/monitor/bm1_counts'][:]
     detector_data = old_file['entry1/data/hmm_xy'][:]
-    normalised_data = np.divide(detector_data,beam_monitor_counts[:,np.newaxis, np.newaxis])*normalisation_value
+    if normalisation_value == 0:
+        average_beam_monitor_counts = np.sum(beam_monitor_counts)/len(beam_monitor_counts)
+        normalisation_value_used = average_beam_monitor_counts
+        print('     Normalisation value used: {0:.1f} (average beam monitor 1 counts)'.format(normalisation_value_used))
+    else:
+        normalisation_value_used = normalisation_value
+        print('     Normalisation value used: {0}'.format(normalisation_value_used))
+    normalised_data = np.divide(detector_data,beam_monitor_counts[:,np.newaxis, np.newaxis])*normalisation_value_used
     # write normalised data 
     write_or_create_dataset(new_file,'entry1/data/hmm_xy', normalised_data)
-    normalisation_label = 'NORMALISED BM1 counts {0}'.format(normalisation_value)
+    normalisation_label = 'NORMALISED BM1 counts {0}'.format(normalisation_value_used)
     norm_label_arr = np.array([normalisation_label]).astype(np.bytes_)
     write_or_create_dataset(new_file,'entry1/data/normalisation', norm_label_arr)
-    print('     Normalised data written to new formatted HDF')
+    print('     Normalisation applied to data')
 
+    return
+
+################################################################################
+def apply_efficiency_calibration(new_file, efficiency_file_path):
+    # get data
+    eff_file = h5py.File(efficiency_file_path,mode='r')
+    eff_cal_array = eff_file['entry1/data/signal'][:]
+    detector_data = new_file['entry1/data/hmm_xy'][:]
+    eff_cal_data = np.repeat(eff_cal_array[np.newaxis],len(detector_data),axis=0)
+    eff_calibrated_counts = np.multiply(eff_cal_data,detector_data)
+    # write efficiency calibrated data 
+    write_or_create_dataset(new_file,'entry1/data/hmm_xy', eff_calibrated_counts)
+    eff_cal_label_arr = np.array([efficiency_file_path]).astype(np.bytes_)
+    write_or_create_dataset(new_file,'entry1/data/efficiency_calibration', eff_cal_label_arr)
+    print('     Efficiency calibration {0} applied to data'.format(efficiency_file_path))
+    eff_file.close()
     return
 
 ################################################################################
@@ -126,13 +149,19 @@ def assign_eulerian_angles(old_file, new_file,
 ################################################################################
 def HDF_to_Int3D_format(data_dir, data_list, formatted_data_dir, 
                         eom_angle = 0, echi_angle = 0, ephi_angle = 0, 
-                        normalisation_value = 10000):
+                        normalisation_value = 0, efficiency_calibration = None):
     """ takes a Wombat HDF for a non-Eulerian cradle measurement
     and formats it for Int3D """
 
     for j in range(len(data_list)):
         run_number = data_list[j][:-7]
-        original_file_path = data_dir +'/' + data_list[j]
+        if data_dir == '':
+            original_file_path = data_list[j]
+        elif data_dir[-1] != '/':
+            original_file_path = data_dir +'/' + data_list[j]
+        else: 
+            original_file_path = data_dir + data_list[j]
+        
         print()
         print('opening {0}'.format(original_file_path))
         try:
@@ -147,6 +176,11 @@ def HDF_to_Int3D_format(data_dir, data_list, formatted_data_dir,
         new_file = h5py.File(new_int3D_hdf, 'a')
         # normalisation
         normalise_frames_to_monitor_counts(old_file, new_file, normalisation_value)
+        # efficiency calibration
+        if efficiency_calibration:
+            apply_efficiency_calibration(new_file, efficiency_calibration)
+        else:
+            print('     no efficiency calibration applied')
         # eulerian angles
         assign_eulerian_angles(old_file, new_file, 
                                eom_angle, echi_angle, ephi_angle)
@@ -162,8 +196,9 @@ def HDF_to_Int3D_format(data_dir, data_list, formatted_data_dir,
             summed_file_name_array = old_file['entry1/experiment/file_name'][:]
             # should be a row (not a column) in case this summed file is then concatenated
             summed_file_name_array = np.transpose(summed_file_name_array)
-            
-        new_file.create_dataset('entry1/data/summed_frames_from_files', data=summed_file_name_array)
+        
+        write_or_create_dataset(new_file,'entry1/data/summed_frames_from_files', summed_file_name_array)
+        #new_file.create_dataset('entry1/data/summed_frames_from_files', data=summed_file_name_array)
 
         print('done {0}'.format(new_int3D_hdf))
         new_file.close()
@@ -312,5 +347,5 @@ def sum_equivalent_frames_in_HDFs(input_files, output_file):
     summed_file.create_dataset('entry1/data/summed_frames_from_files', data=summed_file_name_array)
 
     summed_file.close()
-
+    print('summed detector frames written to {0}'.format(output_file))
     return
