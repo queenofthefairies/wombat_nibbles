@@ -1,0 +1,7 @@
+# Ignore all files with the specified extension.
+# Scope is all repo folders.
+*.zip
+*.sqw
+*.nxs
+*.nxspe
+*.hdf
