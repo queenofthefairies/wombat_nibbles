@@ -11,9 +11,12 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import shutil
+from datetime import datetime
 
 import SingleCrystalHDF
 
+
+startTime = datetime.now()
 data_dir = 'data'
 formatted_data_dir = 'formatted_data' 
 first_file_number = 107754
@@ -22,15 +25,77 @@ last_file_number = 107755
 temperature = 40
 tilt = 0
 omega = -9
+BM1_normalisation_value = 58000
 
+if temperature != 40:
+    tilt = 0
+    omega = -9
+if temperature not in [40, 1700, 10000]:
+    BM1_normalisation_value = 58000/2
+######################### 40 mK data
 if temperature == 40:
     if tilt == 0:
         if omega == -9:
+            #run_number_list = [[107754, 107772],
+            #                   [107755, 107773],
+            #                   [107756, 107774],
+            #                   [107757, 107775]]
+            run_number_list = [107754,
+                               107755,
+                               107756,
+                               107757]
+    if tilt == 5:
+        if omega == -9:
+            BM1_normalisation_value = 58000/2
+            run_number_list = [107760,
+                               107761,
+                               107762,
+                               107763]
+    if tilt == -5:
+        if omega == -9:
             BM1_normalisation_value = 58000
-            run_number_list = [[107754, 107772],
-                               [107755, 107773],
-                               [107756, 107774],
-                               [107757, 107775]]
+            run_number_list = [[107764, 107768],
+                               [107765, 107769],
+                               [107766, 107770],
+                               [107767, 107771]]
+        elif omega == 37:
+            BM1_normalisation_value = 58000
+            run_number_list = [107786, 107787]
+
+###### temperature dependent short runs
+if temperature == 100:
+    run_number_list = [107790, 107791, 107792]
+if temperature == 200:
+    run_number_list = [107794, 107795, 107796]
+if temperature == 300:
+    run_number_list = [107798, 107799, 107800]
+if temperature == 400:
+    run_number_list = [107802, 107803, 107804]
+if temperature == 500:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 600:
+    run_number_list = [107790, 107791, 107792]
+if temperature == 700:
+    run_number_list = [107794, 107795, 107796]
+if temperature == 800:
+    run_number_list = [107798, 107799, 107800]
+if temperature == 900:
+    run_number_list = [107802, 107803, 107804]
+if temperature == 1000:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1100:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1200:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1300:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1400:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1400:
+    run_number_list = [107806, 107807, 107808]
+if temperature == 1400:
+    run_number_list = [107806, 107807, 107808]
+
 
 ############# first sum frames from different run numbers if required
 file_list = []
@@ -66,6 +131,8 @@ SingleCrystalHDF.HDF_to_Int3D_format(data_dir, [output_file], formatted_data_dir
 
 print()
 print('      Done aggregating dataset for {0} mK, tilt {1}, som {2}'.format(temperature,tilt,omega))
+
+print(datetime.now() - startTime)
 # files_list = []
 # for n in range(first_file_number,last_file_number+1):
 #     file_name = 'WBT0{0}.nx.hdf'.format(n)

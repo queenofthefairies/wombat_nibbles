@@ -5,17 +5,24 @@ import shutil
 
 ################################################################################
 def write_or_create_dataset(new_file, group_name, data_arr):
+    if group_name == 'entry1/data/hmm_xy':
+        compression_level = 7
+    else:
+        compression_level = 4
     try:
-        new_file.create_dataset(group_name, data=data_arr)
+        new_file.create_dataset(group_name, data=data_arr, compression='gzip',
+                                compression_opts=compression_level, shuffle=True)
     except ValueError:
         del new_file[group_name]
-        new_file.create_dataset(group_name, data=data_arr)
+        new_file.create_dataset(group_name, data=data_arr, compression='gzip',
+                                compression_opts=compression_level, shuffle=True)
 
     if group_name == 'entry1/data/normalisation':
         print('     rewriting normalisation')
         data_arr = data_arr.astype(np.bytes_)
         del new_file[group_name]
-        new_file.create_dataset(group_name, data=data_arr)
+        new_file.create_dataset(group_name, data=data_arr, compression='gzip',
+                                compression_opts=compression_level, shuffle=True)
     return
 
 ################################################################################
@@ -32,7 +39,8 @@ def copy_run_info(old_file, new_file):
                       'entry1/data/x_pixel_angular_offset',
                       'entry1/data/y_pixel_offset',
                       'entry1/start_time',
-                      'entry1/end_time'
+                      'entry1/end_time',
+                      'entry1/instrument/name'
                       ]
     
     for group_name in groups_to_copy:
@@ -47,11 +55,11 @@ def copy_run_info(old_file, new_file):
     return
 
 ################################################################################
-def normalise_frames_to_monitor_counts(old_file, new_file, 
+def normalise_frames_to_monitor_counts(detector_data_arr, old_file, new_file, 
                                        normalisation_value = 0):
     # get data
     beam_monitor_counts = old_file['entry1/monitor/bm1_counts'][:]
-    detector_data = old_file['entry1/data/hmm_xy'][:]
+    #detector_data_arr = old_file['entry1/data/hmm_xy'][:]
     if normalisation_value == 0:
         average_beam_monitor_counts = np.sum(beam_monitor_counts)/len(beam_monitor_counts)
         normalisation_value_used = average_beam_monitor_counts
@@ -59,31 +67,31 @@ def normalise_frames_to_monitor_counts(old_file, new_file,
     else:
         normalisation_value_used = normalisation_value
         print('     Normalisation value used: {0}'.format(normalisation_value_used))
-    normalised_data = np.divide(detector_data,beam_monitor_counts[:,np.newaxis, np.newaxis])*normalisation_value_used
+    normalised_data = np.divide(detector_data_arr,beam_monitor_counts[:,np.newaxis, np.newaxis])*normalisation_value_used
     # write normalised data 
-    write_or_create_dataset(new_file,'entry1/data/hmm_xy', normalised_data)
+    #write_or_create_dataset(new_file,'entry1/data/hmm_xy', normalised_data)
     normalisation_label = 'NORMALISED BM1 counts {0}'.format(normalisation_value_used)
     norm_label_arr = np.array([normalisation_label]).astype(np.bytes_)
     write_or_create_dataset(new_file,'entry1/data/normalisation', norm_label_arr)
     print('     Normalisation applied to data')
 
-    return
+    return normalised_data
 
 ################################################################################
-def apply_efficiency_calibration(new_file, efficiency_file_path):
+def apply_efficiency_calibration(detector_data_arr, new_file, efficiency_file_path):
     # get data
     eff_file = h5py.File(efficiency_file_path,mode='r')
     eff_cal_array = eff_file['entry1/data/signal'][:]
-    detector_data = new_file['entry1/data/hmm_xy'][:]
-    eff_cal_data = np.repeat(eff_cal_array[np.newaxis],len(detector_data),axis=0)
-    eff_calibrated_counts = np.multiply(eff_cal_data,detector_data)
+    #detector_data = new_file['entry1/data/hmm_xy'][:]
+    eff_cal_data = np.repeat(eff_cal_array[np.newaxis],len(detector_data_arr),axis=0)
+    eff_calibrated_counts = np.multiply(eff_cal_data,detector_data_arr)
     # write efficiency calibrated data 
-    write_or_create_dataset(new_file,'entry1/data/hmm_xy', eff_calibrated_counts)
+    #write_or_create_dataset(new_file,'entry1/data/hmm_xy', eff_calibrated_counts)
     eff_cal_label_arr = np.array([efficiency_file_path]).astype(np.bytes_)
     write_or_create_dataset(new_file,'entry1/data/efficiency_calibration', eff_cal_label_arr)
     print('     Efficiency calibration {0} applied to data'.format(efficiency_file_path))
     eff_file.close()
-    return
+    return eff_calibrated_counts
 
 ################################################################################
 def assign_eulerian_angles(old_file, new_file, 
@@ -174,12 +182,21 @@ def HDF_to_Int3D_format(data_dir, data_list, formatted_data_dir,
         new_int3D_hdf = '{0}/{1}_int3D_format.nx.hdf'.format(formatted_data_dir,run_number)
         new_file = h5py.File(new_int3D_hdf, 'a')
         # normalisation
-        normalise_frames_to_monitor_counts(old_file, new_file, normalisation_value)
+        data_arr = old_file['entry1/data/hmm_xy'][:]
+        processed_data_arr = normalise_frames_to_monitor_counts(data_arr, old_file,
+                                                                new_file, 
+                                                                normalisation_value)
         # efficiency calibration
         if efficiency_calibration:
-            apply_efficiency_calibration(new_file, efficiency_calibration)
+            processed_data_arr = apply_efficiency_calibration(processed_data_arr, 
+                                                              new_file, 
+                                                              efficiency_calibration)
         else:
             print('     no efficiency calibration applied')
+        processed_data_arr = np.rint(processed_data_arr)
+        processed_data_arr = np.array(processed_data_arr, dtype=int)
+        write_or_create_dataset(new_file, 'entry1/data/hmm_xy', processed_data_arr)
+
         # eulerian angles
         assign_eulerian_angles(old_file, new_file, 
                                eom_angle, echi_angle, ephi_angle)
@@ -256,7 +273,10 @@ def concatenate_HDF(input_files, output_file):
                             out_group.create_dataset(
                                 key,
                                 data=concatenated,
-                                dtype=concatenated.dtype
+                                dtype=concatenated.dtype,
+                                compression='gzip',
+                                compression_opts=5, 
+                                shuffle = True
                             )
                             print(
                             f"     {dataset_path}: "
@@ -269,12 +289,18 @@ def concatenate_HDF(input_files, output_file):
             process_group(ref_file, out_f)
 
             ###### some things we don't want to concatenate
+            # don't want to concatenate detector specifications
             x_pixel_arr = np.linspace(0.10938,120.98,num=969)
             write_or_create_dataset(out_f, 'entry1/data/x_pixel_angular_offset', 
                                     x_pixel_arr)
             y_pixel_arr = np.linspace(-0.19844,203,num=129)
             write_or_create_dataset(out_f, 'entry1/data/y_pixel_offset', 
                                     y_pixel_arr)
+            # don't want to concatenate instrument name
+            instrument_name = input_handles[0]['entry1/instrument/name']
+            write_or_create_dataset(out_f, 'entry1/instrument/name', 
+                                    instrument_name)
+            # add concatenated file names
             concatenated_file_names_arr = out_f['entry1/experiment/file_name'][:]
             write_or_create_dataset(out_f, 'entry1/data/concatenated_files', 
                                     concatenated_file_names_arr)
@@ -328,11 +354,13 @@ def sum_equivalent_frames_in_HDFs(input_files, output_file):
 
     # write summed detector frames
     del summed_file['entry1/data/hmm_xy']
-    summed_file.create_dataset('entry1/data/hmm_xy', data=summed_frame_array)
+    summed_file.create_dataset('entry1/data/hmm_xy', data=summed_frame_array,compression='gzip',
+                                compression_opts=7, shuffle=True)
 
     # write summed monitor counts
     del summed_file['entry1/monitor']
-    summed_file.create_dataset('entry1/monitor/bm1_counts', data=summed_monitor_counts_array)
+    summed_file.create_dataset('entry1/monitor/bm1_counts', data=summed_monitor_counts_array,  compression='gzip',
+                                compression_opts=5, shuffle=True)
 
     # write new file_name since new HDF was built from several files
     del summed_file['entry1/experiment/file_name']
